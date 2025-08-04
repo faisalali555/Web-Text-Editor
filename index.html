@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Futuristic Blog Editor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+
+    <style>
+        /* --- General Styles --- */
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+        html, body {
+            height: 100%;
+            overflow-x: hidden;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            color: #2d3748;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        main {
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        /* --- Glassmorphism --- */
+        .glassy-container {
+            background: rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+        }
+
+        /* --- Tool Buttons --- */
+        .tool-btn {
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.7);
+            transition: all 0.2s ease-in-out;
+            color: #4A5568;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 0.5rem 0.75rem;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .tool-btn:hover {
+            background: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            transform: translateY(-1px);
+        }
+        
+        .tool-btn.active {
+            background: #ffffff;
+            color: #3B82F6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+        }
+        
+        .tool-btn-danger {
+            background-color: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.4);
+            color: #ef4444;
+        }
+        .tool-btn-danger:hover {
+            background-color: rgba(239, 68, 68, 0.7);
+            color: #ffffff;
+        }
+
+        .top-toolbar { padding: 0.75rem; display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+        
+        .editing-toolbar { 
+            padding: 0.75rem; 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 0.5rem; 
+            margin-bottom: 1.5rem; 
+            position: relative; 
+            z-index: 10;
+        }
+        .editing-toolbar .tool-btn { min-width: 38px; height: 38px; padding: 0.5rem; }
+        
+        .editor-pane { 
+            padding: 2rem; 
+            min-height: 70vh; 
+            position: relative; 
+            transition: background-color 0.3s, box-shadow 0.3s;
+        }
+        
+        .editor-pane.drag-over {
+            background-color: rgba(59, 130, 246, 0.1);
+            box-shadow: inset 0 0 0 2px #3B82F6;
+        }
+
+        #editor { outline: none; caret-color: #3B82F6; line-height: 1.8; background: transparent; }
+        #metrics-bar { position: absolute; bottom: 1rem; right: 1.5rem; font-size: 0.8rem; color: #718096; background: rgba(255, 255, 255, 0.5); padding: 0.25rem 0.75rem; border-radius: 8px; user-select: none; }
+        mark.highlight { background-color: #ffda79; color: #333; border-radius: 3px; }
+
+        .image-wrapper { 
+            position: relative; 
+            display: inline-block; 
+            resize: both; 
+            overflow: hidden; 
+            line-height: 0; 
+            border-radius: 8px;
+            max-width: 100%;
+        }
+        
+        .image-wrapper img { 
+            width: 100%; 
+            height: 100%;
+            object-fit: contain;
+            display: block; 
+            transition: transform 0.3s, filter 0.3s; 
+        }
+
+        .image-wrapper.selected img { box-shadow: 0 0 0 3px #3B82F6; }
+        
+        .contextual-toolbar { display: none; padding: 0.5rem; gap: 0.5rem; margin-top: 1rem; justify-content: center; flex-wrap: wrap;}
+
+        #editor h1, #editor h2, #editor h3 { margin-top: 1.5em; margin-bottom: 0.5em; line-height: 1.2; font-weight: 700; }
+        #editor h1 { font-size: 2.5em; }
+        #editor h2 { font-size: 2em; }
+        #editor h3 { font-size: 1.75em; }
+        #editor p { margin-bottom: 1.25em; }
+        #editor ul { list-style-type: disc; list-style-position: inside; }
+        #editor ol { list-style-type: decimal; list-style-position: inside; }
+        #editor ul, #editor ol { margin-left: 1.5rem; margin-bottom: 1.25em; }
+        #editor li { margin-bottom: 0.5em; }
+        #editor a { color: #3B82F6; text-decoration: underline; }
+        #editor hr { border-color: #CBD5E0; margin: 2em 0; }
+        #editor table { width: 100%; border-collapse: collapse; margin-bottom: 1.25em; }
+        #editor th, #editor td { border: 1px solid #CBD5E0; padding: 0.75rem; text-align: left; position: relative; }
+        #editor th { background-color: #F7FAFC; }
+
+        /* --- Dropdown Styles --- */
+        .dropdown { position: relative; display: inline-block; }
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background-color: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            min-width: 160px;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+            z-index: 50;
+            border-radius: 8px;
+            padding: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        .dropdown-content button {
+            width: 100%;
+            text-align: left;
+            padding: 0.5rem 1rem;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+        }
+        .dropdown-content button:hover {
+            background-color: rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+        }
+        .color-swatch {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+
+        /* --- Modals --- */
+        .modal-bg { background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(5px); z-index: 50; }
+        .modal-content { background: #ffffff; box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15); border: 1px solid rgba(255, 255, 255, 0.8); color: #2d3748; }
+        .modal-content-glassy { background: rgba(255, 255, 255, 0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+        .modal-content input {
+            background: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            color: #2d3748;
+        }
+        .modal-content input::placeholder { color: #94a3b8; }
+        
+        .blog-item .delete-icon {
+            opacity: 0;
+            transition: opacity 0.2s ease-in-out;
+        }
+        .blog-item:hover .delete-icon {
+            opacity: 1;
+        }
+
+        /* ✅ NEW: Made by Badge Style */
+        .made-by-badge {
+            position: absolute;
+            top: 1.0rem;
+            right: 0.5rem;
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(5px);
+            border: 3px solid rgba(255, 255, 255, 0.7);
+            border-radius: 8999px;
+            padding: 0.45rem 0.95rem;
+            font-size: 0.8rem;
+            color: #4A5568;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            z-index: 20;
+        }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #E2E8F0; }
+        ::-webkit-scrollbar-thumb { background: #A0AEC0; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #718096; }
+    </style>
+</head>
+<body class="min-h-screen p-4 sm:p-6">
+
+    <main class="w-full max-w-6xl mx-auto relative">
+        <!-- ✅ NEW: Made by Badge -->
+        <div class="made-by-badge">
+            <span>Made by Faisal Ali</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-green-600"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+        </div>
+
+        <div class="top-toolbar glassy-container">
+            <button class="tool-btn" onclick="createNewBlog()" title="Start a new blank blog">New Blog</button>
+            <button class="tool-btn" onclick="showRecentBlogs()" title="View your saved blogs">Recent Blogs</button>
+            <button class="tool-btn" onclick="showModal('templatesModal')" title="Use a template">Templates</button>
+            <label for="file-import" class="tool-btn">Import File</label>
+            <input type="file" id="file-import" class="hidden" accept=".json,.html" onchange="importFile(event)">
+            <button class="tool-btn" onclick="showFilenameModal('html')">Download HTML</button>
+            <button class="tool-btn" onclick="showFilenameModal('json')">Download JSON</button>
+            <button class="tool-btn tool-btn-danger" onclick="showModal('confirmResetModal')">Delete All</button>
+        </div>
+
+        <div class="editing-toolbar glassy-container">
+            <!-- Basic Formatting -->
+            <button id="bold-btn" class="tool-btn" title="Bold" onclick="formatDoc('bold')"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path></svg></button>
+            <button id="italic-btn" class="tool-btn" title="Italic" onclick="formatDoc('italic')"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="4" x2="10" y2="4"></line><line x1="14" y1="20" x2="5" y2="20"></line><line x1="15" y1="4" x2="9" y2="20"></line></svg></button>
+            <button id="underline-btn" class="tool-btn" title="Underline" onclick="formatDoc('underline')"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3"></path><line x1="4" y1="21" x2="20" y2="21"></line></svg></button>
+
+            <!-- Formats Dropdown -->
+            <div class="dropdown">
+                <button class="tool-btn" onclick="toggleDropdown('formatsDropdown')">
+                    Formats <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                </button>
+                <div id="formatsDropdown" class="dropdown-content">
+                    <button onclick="formatDoc('formatBlock', '<h1>')"><h1>Heading 1</h1></button>
+                    <button onclick="formatDoc('formatBlock', '<h2>')"><h2>Heading 2</h2></button>
+                    <button onclick="formatDoc('formatBlock', '<h3>')"><h3>Heading 3</h3></button>
+                    <button onclick="formatDoc('formatBlock', '<p>')"><p>Paragraph</p></button>
+                </div>
+            </div>
+
+            <!-- Color Modal Button -->
+            <button class="tool-btn" title="Colors" onclick="openColorModal()"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14-8.5 8.5"/><path d="m12 14 4.5-4.5"/><path d="M16.5 9.5L7.5 20.5"/><path d="M12 14l-1.5 1.5"/><path d="M15 11l-1.5 1.5"/><path d="M18 8l-1.5 1.5"/><path d="M21 5l-1.5 1.5"/><path d="M18 2.5c-1-1-2-1-3 0l-2.5 2.5 4 4 2.5-2.5c1-1 1-2.5 0-3.5z"/></svg></button>
+
+            <!-- Alignment Dropdown -->
+            <div class="dropdown">
+                <button class="tool-btn" onclick="toggleDropdown('alignDropdown')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="10" x2="3" y2="10"></line><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="21" y1="18" x2="3" y2="18"></line></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                </button>
+                <div id="alignDropdown" class="dropdown-content">
+                    <button onclick="formatDoc('justifyLeft')">Align Left</button>
+                    <button onclick="formatDoc('justifyCenter')">Align Center</button>
+                    <button onclick="formatDoc('justifyRight')">Align Right</button>
+                </div>
+            </div>
+
+            <!-- Lists -->
+            <button class="tool-btn" title="Bulleted List" onclick="formatDoc('insertUnorderedList')"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg></button>
+            <button class="tool-btn" title="Numbered List" onclick="formatDoc('insertOrderedList')"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1.5"/></svg></button>
+
+            <!-- Insert Dropdown -->
+            <div class="dropdown">
+                <button class="tool-btn" onclick="toggleDropdown('insertDropdown')">
+                    Insert <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                </button>
+                <div id="insertDropdown" class="dropdown-content">
+                    <button onclick="showModal('linkModal')">Link</button>
+                    <button onclick="showModal('imageModal')">Image</button>
+                    <button onclick="showModal('tableModal')">Table</button>
+                    <button onclick="formatDoc('insertHorizontalRule')">Divider</button>
+                    <button onclick="showModal('emojiModal')">Emoji</button>
+                </div>
+            </div>
+
+            <!-- Other Tools -->
+            <button class="tool-btn" title="Code Block" onclick="formatSelectionAsCode()"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg></button>
+            <button class="tool-btn" title="Find & Replace" onclick="openFindReplaceModal()"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></button>
+        </div>
+
+        <div class="editor-pane glassy-container">
+            <div id="editor" contenteditable="true" class="prose max-w-none"></div>
+            <div id="metrics-bar">0 Words | 0 Characters | 0 min read</div>
+        </div>
+        
+        <div id="table-toolbar" class="contextual-toolbar glassy-container">
+            <button class="tool-btn" onclick="tableAction('addRow')">Add Row</button>
+            <button class="tool-btn" onclick="tableAction('addCol')">Add Column</button>
+            <button class="tool-btn" onclick="tableAction('deleteRow')">Delete Row</button>
+            <button class="tool-btn" onclick="tableAction('deleteCol')">Delete Column</button>
+        </div>
+        
+        <div id="image-toolbar" class="contextual-toolbar glassy-container">
+            <button class="tool-btn" onclick="imageAction('rotate')">Rotate</button>
+            <button class="tool-btn" onclick="imageAction('grayscale')">Grayscale</button>
+            <button class="tool-btn" onclick="imageAction('sepia')">Sepia</button>
+            <button class="tool-btn" onclick="imageAction('reset')">Reset</button>
+        </div>
+    </main>
+
+    <!-- Modals -->
+    <div id="findReplaceModal" class="modal-bg fixed inset-0 z-50 items-center justify-center hidden"><div class="modal-content modal-content-glassy w-11/12 max-w-sm p-6 rounded-2xl flex flex-col gap-4"><div class="flex justify-between items-center"><h3 class="text-xl font-bold">Find & Replace</h3><span id="findCount" class="text-sm text-gray-600">0 matches</span></div><input id="findInput" type="text" placeholder="Find..." class="bg-gray-100 border border-gray-300 rounded-lg p-2 w-full outline-none focus:ring-2 focus:ring-blue-500"><input id="replaceInput" type="text" placeholder="Replace with..." class="bg-gray-100 border border-gray-300 rounded-lg p-2 w-full outline-none focus:ring-2 focus:ring-blue-500"><div class="grid grid-cols-2 gap-2"><button class="tool-btn" onclick="replaceAll()">Replace All</button><button class="tool-btn" onclick="closeFindReplaceModal()">Close</button></div></div></div>
+    <div id="emojiModal" class="modal-bg fixed inset-0 z-50 items-center justify-center hidden"><div class="modal-content modal-content-glassy w-11/12 max-w-sm p-6 rounded-2xl flex flex-col gap-4"><h3 class="text-xl font-bold">Insert Emoji</h3><div id="emojiGrid" class="grid grid-cols-8 gap-2 text-2xl max-h-60 overflow-y-auto"></div><button class="tool-btn mt-2" onclick="hideModal('emojiModal')">Close</button></div></div>
+    <div id="linkModal" class="modal-bg fixed inset-0 z-50 items-center justify-center hidden"><div class="modal-content w-11/12 max-w-sm p-6 rounded-2xl flex flex-col gap-4"><h3 class="text-xl font-bold">Insert Link</h3><input id="linkUrl" type="text" placeholder="https://example.com" class="bg-gray-100 border border-gray-300 rounded-lg p-2 w-full outline-none focus:ring-2 focus:ring-blue-500"><div class="flex justify-end gap-3"><button class="tool-btn" onclick="hideModal('linkModal')">Cancel</button><button class="tool-btn bg-blue-500 text-white hover:bg-blue-600" onclick="addLink()">Add</button></div></div></div>
+    <div id="imageModal" class="modal-bg fixed inset-0 z-50 items-center justify-center hidden"><div class="modal-content w-11/12 max-w-sm p-6 rounded-2xl flex flex-col gap-4"><h3 class="text-xl font-bold">Insert Image</h3><input id="imageUrl" type="text" placeholder="Image URL" class="bg-gray-100 border border-gray-300 rounded-lg p-2 w-full outline-none focus:ring-2 focus:ring-blue-500"><p class="text-center text-gray-500">OR</p><label for="imageUpload" class="tool-btn justify-center cursor-pointer">Upload Image</label><input type="file" id="imageUpload" class="hidden" accept="image/*" onchange="uploadImage(event)"><div class="flex justify-end gap-3 mt-2"><button class="tool-btn" onclick="hideModal('imageModal')">Cancel</button><button class="tool-btn bg-blue-500 text-white hover:bg-blue-600" onclick="insertImageFromUrl()">Add from URL</button></div></div></div>
+    <div id="tableModal" class="modal-bg fixed inset-0 z-50 items-center justify-center hidden"><div class="modal-content w-11/12 max-w-sm p-6 rounded-2xl flex flex-col gap-4"><h3 class="text-xl font-bold">Insert Table</h3><input id="tableRows" type="number" placeholder="Rows" value="3" class="bg-gray-100 border border-gray-300 rounded-lg p-2 w-full outline-none focus:ring-2 focus:ring-blue-500"><input id="tableCols" type="number" placeholder="Columns" value="3" class="bg-gray-100 border border-gray-300 rounded-lg p-2 w-full outline-none focus:ring-2 focus:ring-blue-500"><div class="flex justify-end gap-3"><button class="tool-btn" onclick="hideModal('tableModal')">Cancel</button><button class="tool-btn bg-blue-500 text-white hover:bg-blue-600" onclick="insertTable()">Insert</button></div></div></div>
+    <div id="filenameModal" class="modal-bg fixed inset-0 z-50 items-center justify-center hidden"><div class="modal-content w-11/12 max-w-sm p-6 rounded-2xl flex flex-col gap-4"><h3 class="text-xl font-bold">Enter File Title</h3><input id="filenameInput" type="text" placeholder="my-awesome-post" class="bg-gray-100 border border-gray-300 rounded-lg p-2 w-full outline-none focus:ring-2 focus:ring-blue-500"><div class="flex justify-end gap-3"><button class="tool-btn" onclick="hideModal('filenameModal')">Cancel</button><button class="tool-btn bg-blue-500 text-white hover:bg-blue-600" onclick="handleFileDownload()">Save</button></div></div></div>
+    <div id="confirmResetModal" class="modal-bg fixed inset-0 z-50 items-center justify-center hidden"><div class="modal-content w-11/12 max-w-sm p-6 rounded-2xl flex flex-col gap-4"><h3 class="text-xl font-bold">Are you sure?</h3><p class="text-gray-600">This will delete all content from the editor and local storage. This action cannot be undone.</p><div class="flex justify-end gap-3"><button class="tool-btn" onclick="hideModal('confirmResetModal')">Cancel</button><button class="tool-btn tool-btn-danger" onclick="resetEditor()">Yes, Delete All</button></div></div></div>
+    <div id="recentBlogsModal" class="modal-bg fixed inset-0 z-50 items-center justify-center hidden"><div class="modal-content w-11/12 max-w-lg p-6 rounded-2xl flex flex-col gap-4"><h3 class="text-xl font-bold">Recent Blogs</h3><ul id="recentBlogsList" class="max-h-96 overflow-y-auto space-y-3"></ul><div class="flex justify-end gap-3"><button class="tool-btn" onclick="hideModal('recentBlogsModal')">Close</button></div></div></div>
+    <div id="templatesModal" class="modal-bg fixed inset-0 z-50 items-center justify-center hidden">
+        <div class="modal-content w-11/12 max-w-lg p-6 rounded-2xl flex flex-col gap-4">
+            <h3 class="text-xl font-bold">Choose a Template</h3>
+            <p class="text-gray-600">Note: This will replace your current content.</p>
+            <div id="templatesList" class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
+            </div>
+            <div class="flex justify-end gap-3">
+                <button class="tool-btn" onclick="hideModal('templatesModal')">Cancel</button>
+            </div>
+        </div>
+    </div>
+    <div id="colorModal" class="modal-bg fixed inset-0 z-50 items-center justify-center hidden">
+        <div class="modal-content w-11/12 max-w-xs p-6 rounded-2xl flex flex-col gap-4">
+            <div class="p-2">
+                <p class="text-xs font-bold mb-2">TEXT COLOR</p>
+                <div class="grid grid-cols-5 gap-2" id="textColorGrid"></div>
+            </div>
+            <div class="p-2">
+                <p class="text-xs font-bold mb-2">HIGHLIGHT COLOR</p>
+                <div class="grid grid-cols-5 gap-2" id="highlightColorGrid"></div>
+            </div>
+             <div class="flex justify-end gap-3">
+                <button class="tool-btn" onclick="hideModal('colorModal')">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    <script>
+        const editor = document.getElementById('editor');
+        const editorPane = document.querySelector('.editor-pane');
+        let selectionRange;
+        let fileTypeToDownload = '';
+        let currentTableSelection = { table: null, cell: null, row: null };
+        let currentImageSelection = { wrapper: null, img: null, rotation: 0 };
+        let activeColorCommand = 'foreColor';
+
+        const templates = {
+            'blogPost': {
+                name: 'Blog Post',
+                description: 'A standard structure for a blog article.',
+                html: '<h1>Your Blog Title Here</h1><h2>Subtitle or Introduction</h2><p>Start writing your main content here. Use paragraphs to separate your ideas.</p><h3>A Key Point</h3><p>Elaborate on a key point. You can use <strong>bold</strong>, <em>italics</em>, and <a href="#">links</a> to add emphasis.</p><ul><li>List item one</li><li>List item two</li></ul><p>Conclusion paragraph goes here.</p>'
+            },
+            'meetingNotes': {
+                name: 'Meeting Notes',
+                description: 'Organize notes from a meeting.',
+                html: '<h1>Meeting Notes: [Meeting Title]</h1><p><strong>Date:</strong> ' + new Date().toLocaleDateString() + '</p><p><strong>Attendees:</strong> </p><ul><li>Name 1</li><li>Name 2</li></ul><h2>Agenda</h2><ol><li>Topic 1</li><li>Topic 2</li></ol><h2>Discussion</h2><p>Notes on the discussion points...</p><h2>Action Items</h2><ul><li><strong>[Owner]</strong>: Task description - Due: [Date]</li></ul>'
+            }
+        };
+
+        const colors = ['#000000', '#EF4444', '#F97316', '#EAB308', '#22C55E', '#3B82F6', '#8B5CF6', '#EC4899', '#78716C', '#FFFFFF'];
+        const highlights = ['#FFFFFF00', '#FEE2E2', '#FFEDD5', '#FEF9C3', '#DCFCE7', '#DBEAFE', '#EEDCFF', '#FCE7F3', '#E7E5E4', '#D1D5DB'];
+
+        function extractTitle(htmlContent) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = htmlContent;
+            const firstHeading = tempDiv.querySelector('h1, h2, h3');
+            if (firstHeading && firstHeading.innerText.trim()) {
+                return firstHeading.innerText.trim();
+            }
+            return 'Untitled Blog';
+        }
+
+        function getWordCount(htmlContent) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = htmlContent;
+            const text = tempDiv.innerText || '';
+            const words = text.trim().split(/\s+/).filter(Boolean);
+            return (words.length === 1 && words[0] === '') ? 0 : words.length;
+        }
+        
+        function readFileAsText(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(reader.error);
+                reader.readAsText(file);
+            });
+        }
+        
+        function saveToRecents(title, content, wordCount) {
+            const blogs = JSON.parse(localStorage.getItem('allBlogs') || '[]');
+            const blogData = {
+                id: Date.now() + Math.random(),
+                title: title,
+                wordCount: wordCount,
+                content: content,
+                modified: new Date().toISOString()
+            };
+            blogs.unshift(blogData);
+            localStorage.setItem('allBlogs', JSON.stringify(blogs));
+        }
+        
+        function archiveCurrentContent() {
+            const currentContent = editor.innerHTML;
+            if (editor.innerText.trim().length > 1) {
+                const title = extractTitle(currentContent);
+                const wordCount = getWordCount(currentContent);
+                saveToRecents(title, currentContent, wordCount);
+            }
+        }
+        
+        const saveContent = () => localStorage.setItem('editorContent', editor.innerHTML);
+        const loadContent = () => {
+            const savedContent = localStorage.getItem('editorContent');
+            editor.innerHTML = savedContent || '<p><br></p>';
+            updateMetrics();
+        };
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadContent();
+            populateEmojiPicker();
+            populateTemplates();
+            populateColorGrids();
+            editor.addEventListener('paste', handlePaste);
+            editorPane.addEventListener('dragover', handleDragOver);
+            editorPane.addEventListener('dragleave', handleDragLeave);
+            editorPane.addEventListener('drop', handleDrop);
+        });
+        
+        editor.addEventListener('input', (e) => {
+            saveContent();
+            updateMetrics();
+            handleMarkdown(e);
+        });
+
+        function handleDragOver(e) { e.preventDefault(); e.stopPropagation(); editorPane.classList.add('drag-over'); }
+        function handleDragLeave(e) { e.preventDefault(); e.stopPropagation(); editorPane.classList.remove('drag-over'); }
+
+        async function handleDrop(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            editorPane.classList.remove('drag-over');
+        
+            const dt = e.dataTransfer;
+            if (!dt) return;
+        
+            let range;
+            const x = e.clientX;
+            const y = e.clientY;
+        
+            if (document.caretRangeFromPoint) {
+                range = document.caretRangeFromPoint(x, y);
+            }
+            
+            if (!range || !editor.contains(range.startContainer)) {
+                editor.focus();
+                range = document.createRange();
+                const lastChild = editor.lastElementChild || editor;
+                range.selectNodeContents(lastChild);
+                range.collapse(false);
+            }
+            
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+        
+            const files = Array.from(dt.files);
+        
+            const imageFile = files.find(f => f.type.startsWith('image/'));
+            if (imageFile) {
+                const reader = new FileReader();
+        
+                reader.onload = (event) => {
+                    const imgWrapper = document.createElement('div');
+                    imgWrapper.className = 'image-wrapper';
+                    imgWrapper.setAttribute('contenteditable', 'false');
+        
+                    const img = document.createElement('img');
+                    img.src = event.target.result;
+                    img.dataset.rotation = "0";
+                    imgWrapper.appendChild(img);
+        
+                    const newPara = document.createElement('p');
+                    newPara.innerHTML = '<br>';
+        
+                    range.insertNode(imgWrapper);
+                    imgWrapper.after(newPara);
+                    
+                    selection.removeAllRanges();
+                    range.setStart(newPara, 0);
+                    selection.addRange(range);
+        
+                    saveContent();
+                };
+        
+                reader.readAsDataURL(imageFile);
+                return;
+            }
+        
+            const blogFiles = files.filter(f => f.name.endsWith('.html') || f.name.endsWith('.json'));
+            if (blogFiles.length > 0) {
+                 archiveCurrentContent();
+                 const filesToProcess = blogFiles.slice(0, -1);
+                 const lastFile = blogFiles[blogFiles.length - 1];
+
+                 for (const file of filesToProcess) {
+                     try {
+                         const fileContent = await readFileAsText(file);
+                         let blogContent = file.name.endsWith('.json') ? JSON.parse(fileContent).html || '' : fileContent;
+                         const title = extractTitle(blogContent) || file.name.replace(/\.[^/.]+$/, "");
+                         const wordCount = getWordCount(blogContent);
+                         saveToRecents(title, blogContent, wordCount);
+                     } catch (error) { console.error(`Error processing ${file.name}:`, error); }
+                 }
+
+                 try {
+                     const lastFileContent = await readFileAsText(lastFile);
+                     let lastBlogContent = lastFile.name.endsWith('.json') ? JSON.parse(lastFileContent).html || '' : lastFileContent;
+                     editor.innerHTML = lastBlogContent;
+                     saveContent();
+                     updateMetrics();
+                 } catch (error) { console.error(`Error processing last file ${lastFile.name}:`, error); }
+                 return;
+            }
+            
+            const uri = dt.getData('text/uri-list');
+            if (uri) {
+                document.execCommand('insertHTML', false, `<a href="${uri}" target="_blank">${uri}</a>`);
+                return;
+            }
+        
+            const text = dt.getData('text/plain');
+            if (text) {
+                document.execCommand('insertText', false, text);
+            }
+        }
+        
+        function handlePaste(e) {
+            e.preventDefault();
+            const clipboardData = e.clipboardData || window.clipboardData;
+            
+            const pastedHtml = clipboardData.getData('text/html');
+            if (pastedHtml) {
+                document.execCommand('insertHTML', false, pastedHtml);
+                return;
+            }
+
+            const pastedText = clipboardData.getData('text/plain');
+            if (pastedText) {
+                const urlRegex = /^(https?:\/\/[^\s$.?#].[^\s]*|www\.[^\s$.?#].[^\s]*)$/i;
+                if (urlRegex.test(pastedText.trim())) {
+                    let href = pastedText.trim();
+                    if (!href.startsWith('http')) { href = 'https://' + href; }
+                    const linkHtml = `<a href="${href}" target="_blank">${pastedText.trim()}</a>`;
+                    document.execCommand('insertHTML', false, linkHtml);
+                } else {
+                    document.execCommand('insertText', false, pastedText);
+                }
+            }
+        }
+        
+        document.addEventListener('click', (e) => {
+            checkContext(e.target);
+            updateToolbarState();
+        });
+        document.addEventListener('selectionchange', updateToolbarState);
+
+        function checkContext(target) {
+            const cell = target.closest('td, th');
+            if (cell) {
+                currentTableSelection.cell = cell;
+                currentTableSelection.row = cell.parentElement;
+                currentTableSelection.table = cell.closest('table');
+                document.getElementById('table-toolbar').style.display = 'flex';
+            } else {
+                document.getElementById('table-toolbar').style.display = 'none';
+            }
+            
+            const img = target.closest('img');
+            const wrapper = target.closest('.image-wrapper');
+            document.querySelectorAll('.image-wrapper').forEach(w => w.classList.remove('selected'));
+            if (img && wrapper) {
+                wrapper.classList.add('selected');
+                currentImageSelection.wrapper = wrapper;
+                currentImageSelection.img = img;
+                document.getElementById('image-toolbar').style.display = 'flex';
+            } else {
+                 document.getElementById('image-toolbar').style.display = 'none';
+            }
+        }
+        
+        const updateMetrics = () => {
+            const text = editor.innerText || '';
+            const charCount = text.length;
+            const words = text.trim().split(/\s+/).filter(Boolean);
+            const wordCount = (words.length === 1 && words[0] === '') ? 0 : words.length;
+            const wpm = 225;
+            const readingTime = Math.ceil(wordCount / wpm);
+            document.getElementById('metrics-bar').textContent = `${wordCount} Words | ${charCount} Characters | ${readingTime} min read`;
+        };
+        
+        const handleMarkdown = (e) => {
+            if (e.inputType === 'insertText' && e.data === ' ') {
+                const selection = window.getSelection();
+                const node = selection.anchorNode;
+                if (node && node.nodeType === 3) {
+                    const text = node.textContent.slice(0, selection.anchorOffset);
+                    if (text.trim() === '#') { 
+                        node.textContent = node.textContent.replace(/^#\s/, '');
+                        document.execCommand('formatBlock', false, '<h1>'); 
+                    } 
+                    else if (text.trim() === '*') { 
+                        node.textContent = node.textContent.replace(/^\*\s/, '');
+                        document.execCommand('insertUnorderedList'); 
+                    }
+                }
+            }
+        };
+
+        editorPane.addEventListener('click', (e) => { if (e.target === editorPane) { editor.focus(); const range = document.createRange(); const sel = window.getSelection(); range.selectNodeContents(editor); range.collapse(false); sel.removeAllRanges(); sel.addRange(range); } });
+        document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); openFindReplaceModal(); } });
+        
+        function saveSelection() { const sel = window.getSelection(); if (sel.getRangeAt && sel.rangeCount) selectionRange = sel.getRangeAt(0); }
+        function restoreSelection() { if (selectionRange) { editor.focus(); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(selectionRange); } }
+        function updateToolbarState() { const states = { 'bold': 'bold-btn', 'italic': 'italic-btn', 'underline': 'underline-btn' }; for (const [command, buttonId] of Object.entries(states)) { document.getElementById(buttonId).classList.toggle('active', document.queryCommandState(command)); } }
+        
+        function formatDoc(command, value = null) {
+            editor.focus();
+            if (command === 'hiliteColor') {
+                document.execCommand('backColor', false, value);
+            } else {
+                document.execCommand(command, false, value);
+            }
+            updateToolbarState();
+        }
+
+        function insertCodeBlock() { const codeBlock = `<pre class="language-js"><code>// Your code here\n</code></pre><p><br></p>`; document.execCommand('insertHTML', false, codeBlock); }
+
+        function formatSelectionAsCode() {
+            const selection = window.getSelection();
+            if (!selection.rangeCount || selection.isCollapsed) {
+                insertCodeBlock();
+                return;
+            }
+
+            const range = selection.getRangeAt(0);
+            const selectedText = range.toString();
+
+            const escapedText = selectedText
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+
+            const codeBlockHtml = `<pre class="language-js"><code>${escapedText}</code></pre>`;
+            document.execCommand('insertHTML', false, codeBlockHtml);
+
+            setTimeout(() => {
+                Prism.highlightAllUnder(editor);
+            }, 50);
+        }
+
+        function showModal(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.classList.remove('hidden');
+                el.classList.add('flex');
+            }
+        }
+
+        function hideModal(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.classList.add('hidden');
+                el.classList.remove('flex');
+            }
+        }
+
+        function showFilenameModal(fileType) {
+            fileTypeToDownload = fileType;
+            showModal('filenameModal');
+        }
+
+        function openFindReplaceModal() {
+            saveSelection();
+            showModal('findReplaceModal');
+            document.getElementById('findInput').focus();
+        }
+        
+        function closeFindReplaceModal() {
+            removeHighlights();
+            hideModal('findReplaceModal');
+            restoreSelection();
+        }
+
+        function addLink() { restoreSelection(); if (document.getElementById('linkUrl').value) formatDoc('createLink', document.getElementById('linkUrl').value); hideModal('linkModal'); document.getElementById('linkUrl').value = ''; }
+        function insertImageFromUrl() { restoreSelection(); if (document.getElementById('imageUrl').value) document.execCommand('insertHTML', false, `<div class="image-wrapper" contenteditable="false"><img src="${document.getElementById('imageUrl').value}" data-rotation="0" onerror="this.parentElement.style.display='none';"></div><p><br></p>`); hideModal('imageModal'); document.getElementById('imageUrl').value = ''; }
+        function uploadImage(event) { const file = event.target.files[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { restoreSelection(); document.execCommand('insertHTML', false, `<div class="image-wrapper" contenteditable="false"><img src="${e.target.result}" data-rotation="0"></div><p><br></p>`); hideModal('imageModal'); }; reader.readAsDataURL(file); } }
+        function insertTable() { restoreSelection(); const rows = document.getElementById('tableRows').value || 2; const cols = document.getElementById('tableCols').value || 2; let table = '<table><tbody>'; for (let i = 0; i < rows; i++) { table += '<tr>'; for (let j = 0; j < cols; j++) { table += '<td><br></td>'; } table += '</tr>'; } table += '</tbody></table><p><br></p>'; document.execCommand('insertHTML', false, table); hideModal('tableModal'); }
+        
+        async function importFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            archiveCurrentContent();
+
+            try {
+                const fileContent = await readFileAsText(file);
+                let blogContent = file.name.endsWith('.json') ? JSON.parse(fileContent).html || '' : fileContent;
+                editor.innerHTML = blogContent;
+                saveContent();
+                updateMetrics();
+            } catch (error) {
+                console.error("Error processing imported file:", error);
+                alert(`Could not process file: ${file.name}`);
+            }
+        }
+
+        function downloadFile(filename, content, contentType) { const a = document.createElement('a'); const blob = new Blob([content], { type: contentType }); a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href); }
+        
+        function handleFileDownload() {
+            const filenameInput = document.getElementById('filenameInput');
+            let filename = filenameInput.value.trim() || 'untitled';
+            let blogs = JSON.parse(localStorage.getItem('allBlogs') || '[]');
+
+            const existingBlogIndex = blogs.findIndex(b => b.title.toLowerCase() === filename.toLowerCase());
+
+            if (existingBlogIndex > -1) {
+                if (!confirm('A blog with this name already exists. Do you want to replace it?')) {
+                    return;
+                }
+                blogs.splice(existingBlogIndex, 1);
+                localStorage.setItem('allBlogs', JSON.stringify(blogs));
+            }
+            
+            saveToRecents(filename, editor.innerHTML, getWordCount(editor.innerHTML));
+            
+            if (fileTypeToDownload === 'html') { 
+                const content = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>${filename}</title><style>body{margin:0;font-family:sans-serif;line-height:1.6;}.content-wrapper{max-width:1100px;margin:2rem auto;padding:0 2rem;box-sizing:border-box;}img{max-width:100%;height:auto;border-radius:8px;}pre{background:#f4f4f4;padding:1em;border-radius:5px;overflow-x:auto;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:8px;}</style></head><body><div class="content-wrapper">${editor.innerHTML}</div></body></html>`; 
+                downloadFile(`${filename}.html`, content, 'text/html'); 
+            } else if (fileTypeToDownload === 'json') { 
+                const content = { title: filename, html: editor.innerHTML, createdAt: new Date().toISOString() }; 
+                downloadFile(`${filename}.json`, JSON.stringify(content, null, 2), 'application/json'); 
+            } 
+            hideModal('filenameModal'); 
+            filenameInput.value = ''; 
+        }
+
+        function resetEditor() {
+            editor.innerHTML = '<p><br></p>';
+            localStorage.removeItem('allBlogs');
+            saveContent();
+            updateMetrics();
+            hideModal('confirmResetModal');
+        }
+
+        function createNewBlog() {
+            archiveCurrentContent();
+            editor.innerHTML = '<p><br></p>';
+            saveContent();
+            updateMetrics();
+        }
+
+        const findInput = document.getElementById('findInput');
+        function removeHighlights() { editor.querySelectorAll('mark.highlight').forEach(mark => { mark.outerHTML = mark.innerHTML; }); editor.normalize(); }
+        function highlightMatches() { removeHighlights(); const findTerm = findInput.value; if (!findTerm) { document.getElementById('findCount').textContent = '0 matches'; return; } const regex = new RegExp(`(${findTerm})`, 'gi'); let matchCount = 0; const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT); let node; while(node = walker.nextNode()) { if (node.parentElement.tagName !== 'MARK' && node.parentElement.tagName !== 'STYLE' && node.parentElement.tagName !== 'SCRIPT') { const matches = node.textContent.match(regex); if (matches) { matchCount += matches.length; const newHtml = node.textContent.replace(regex, '<mark class="highlight">$1</mark>'); const tempDiv = document.createElement('div'); tempDiv.innerHTML = newHtml; while (tempDiv.firstChild) { node.parentNode.insertBefore(tempDiv.firstChild, node); } node.parentNode.removeChild(node); } } } document.getElementById('findCount').textContent = `${matchCount} matches`; }
+        findInput.addEventListener('input', highlightMatches);
+        function replaceAll() { const findTerm = findInput.value; const replaceTerm = document.getElementById('replaceInput').value; if (findTerm && findTerm !== replaceTerm) { removeHighlights(); const regex = new RegExp(findTerm, 'gi'); editor.innerHTML = editor.innerHTML.replace(regex, replaceTerm); saveContent(); } }
+        
+        function populateEmojiPicker() { 
+            const emojis = ['&#x1F600;', '&#x1F602;', '&#x1F60A;', '&#x1F60D;', '&#x1F914;', '&#x1F60E;', '&#x1F622;', '&#x1F621;', '&#x1F44D;', '&#x1F44E;', '&#x2764;&#xFE0F;', '&#x1F525;', '&#x1F389;', '&#x1F680;', '&#x1F4A1;', '&#x1F4BB;'];
+            const grid = document.getElementById('emojiGrid');
+            grid.innerHTML = '';
+            emojis.forEach(emojiHTML => { 
+                const btn = document.createElement('button'); 
+                btn.innerHTML = emojiHTML;
+                btn.className = 'hover:bg-gray-200 rounded-md p-1'; 
+                btn.onclick = () => { 
+                    restoreSelection(); 
+                    const temp = document.createElement('textarea');
+                    temp.innerHTML = emojiHTML;
+                    document.execCommand('insertText', false, temp.value); 
+                }; 
+                grid.appendChild(btn); 
+            }); 
+        }
+        
+        function tableAction(action) { const { table, row, cell } = currentTableSelection; if (!table) return; const rowIndex = row.rowIndex; const cellIndex = cell.cellIndex; if (action === 'addRow') { const newRow = table.insertRow(rowIndex + 1); for (let i = 0; i < row.cells.length; i++) newRow.insertCell(i).innerHTML = '<br>'; } else if (action === 'addCol') { for (let i = 0; i < table.rows.length; i++) table.rows[i].insertCell(cellIndex + 1).innerHTML = '<br>'; } else if (action === 'deleteRow') { table.deleteRow(rowIndex); } else if (action === 'deleteCol') { for (let i = 0; i < table.rows.length; i++) table.rows[i].deleteCell(cellIndex); } saveContent(); }
+        function imageAction(action) {
+            const { img } = currentImageSelection;
+            if (!img) return;
+            if (action === 'rotate') {
+                let currentRotation = parseInt(img.dataset.rotation || 0);
+                currentRotation = (currentRotation + 90) % 360;
+                img.style.transform = `rotate(${currentRotation}deg)`;
+                img.dataset.rotation = currentRotation;
+            } else if (action === 'grayscale') {
+                img.style.filter = 'grayscale(100%)';
+            } else if (action === 'sepia') {
+                img.style.filter = 'sepia(100%)';
+            } else if (action === 'reset') {
+                img.style.transform = 'rotate(0deg)';
+                img.style.filter = 'none';
+                img.dataset.rotation = 0;
+            }
+            saveContent();
+        }
+
+        function showRecentBlogs() {
+            const blogs = JSON.parse(localStorage.getItem('allBlogs') || '[]');
+            const listElement = document.getElementById('recentBlogsList');
+            listElement.innerHTML = ''; 
+
+            if (blogs.length === 0) {
+                listElement.innerHTML = '<li class="text-gray-500 text-center p-4">No recent blogs found. <br> Save a blog or drop a file to see it here.</li>';
+            } else {
+                blogs.sort((a, b) => new Date(b.modified) - new Date(a.modified));
+
+                blogs.forEach(blog => {
+                    const listItem = document.createElement('li');
+                    listItem.className = 'blog-item flex justify-between items-center p-3 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors group';
+                    
+                    const blogContent = document.createElement('div');
+                    blogContent.className = 'cursor-pointer flex-grow';
+                    blogContent.setAttribute('onclick', `loadBlog(${blog.id})`);
+                    blogContent.innerHTML = `
+                        <span class="font-semibold text-gray-800">${blog.title}</span>
+                        <p class="text-sm text-gray-500">${blog.wordCount} words &bull; Last modified: ${new Date(blog.modified).toLocaleString()}</p>
+                    `;
+
+                    const deleteButton = document.createElement('button');
+                    deleteButton.className = 'delete-icon text-gray-400 hover:text-red-500 p-1 ml-2';
+                    deleteButton.title = 'Delete this blog';
+                    deleteButton.setAttribute('onclick', `event.stopPropagation(); deleteSingleBlog(${blog.id})`);
+                    deleteButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>`;
+                    
+                    listItem.appendChild(blogContent);
+                    listItem.appendChild(deleteButton);
+                    listElement.appendChild(listItem);
+                });
+            }
+            showModal('recentBlogsModal');
+        }
+
+        function loadBlog(blogId) {
+            const blogs = JSON.parse(localStorage.getItem('allBlogs') || '[]');
+            const blogToLoad = blogs.find(b => b.id === blogId);
+
+            if (blogToLoad) {
+                archiveCurrentContent();
+                editor.innerHTML = blogToLoad.content;
+                saveContent();
+                updateMetrics();
+                deleteSingleBlog(blogId, false);
+                hideModal('recentBlogsModal');
+            } else {
+                console.error('Error: Blog could not be found.');
+            }
+        }
+
+        function deleteSingleBlog(blogId, confirmDelete = true) {
+            const deleteIt = () => {
+                let blogs = JSON.parse(localStorage.getItem('allBlogs') || '[]');
+                const updatedBlogs = blogs.filter(b => b.id !== blogId);
+                localStorage.setItem('allBlogs', JSON.stringify(updatedBlogs));
+                showRecentBlogs();
+            };
+
+            if (confirmDelete) {
+                if (confirm('Are you sure you want to permanently delete this blog?')) {
+                    deleteIt();
+                }
+            } else {
+                deleteIt();
+            }
+        }
+
+        function populateTemplates() {
+            const listElement = document.getElementById('templatesList');
+            listElement.innerHTML = '';
+            for (const key in templates) {
+                const template = templates[key];
+                const button = document.createElement('button');
+                button.className = 'text-left p-4 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors';
+                button.innerHTML = `<span class="font-semibold text-gray-800">${template.name}</span><p class="text-sm text-gray-500">${template.description}</p>`;
+                button.onclick = () => insertTemplate(key);
+                listElement.appendChild(button);
+            }
+        }
+
+        function insertTemplate(templateKey) {
+            if (templates[templateKey]) {
+                if (editor.innerText.trim().length > 1) {
+                     if (!confirm('This will replace your current content. Are you sure?')) {
+                         hideModal('templatesModal');
+                         return;
+                     }
+                     archiveCurrentContent();
+                }
+                editor.innerHTML = templates[templateKey].html;
+                saveContent();
+                updateMetrics();
+                hideModal('templatesModal');
+            }
+        }
+
+        function toggleDropdown(id) {
+            const allDropdowns = document.querySelectorAll('.dropdown-content');
+            allDropdowns.forEach(d => {
+                if (d.id !== id) {
+                    d.style.display = 'none';
+                }
+            });
+            const dropdown = document.getElementById(id);
+            dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+        }
+
+        window.onclick = function(event) {
+            if (!event.target.closest('.dropdown')) {
+                const dropdowns = document.getElementsByClassName("dropdown-content");
+                for (let i = 0; i < dropdowns.length; i++) {
+                    dropdowns[i].style.display = "none";
+                }
+            }
+        }
+
+        function openColorModal() {
+            saveSelection();
+            showModal('colorModal');
+        }
+
+        function applyColor(command, color) {
+            restoreSelection();
+            formatDoc(command, color);
+            hideModal('colorModal');
+        }
+
+        function populateColorGrids() {
+            const textColorGrid = document.getElementById('textColorGrid');
+            const highlightColorGrid = document.getElementById('highlightColorGrid');
+            
+            textColorGrid.innerHTML = '';
+            highlightColorGrid.innerHTML = '';
+
+            colors.forEach(color => {
+                const swatch = document.createElement('div');
+                swatch.className = 'color-swatch';
+                swatch.style.backgroundColor = color;
+                swatch.onclick = () => applyColor('foreColor', color);
+                textColorGrid.appendChild(swatch);
+            });
+
+            highlights.forEach(color => {
+                const swatch = document.createElement('div');
+                swatch.className = 'color-swatch';
+                swatch.style.backgroundColor = color === '#FFFFFF00' ? 'transparent' : color;
+                if (color === '#FFFFFF00') swatch.style.backgroundImage = 'url("data:image/svg+xml,%3csvg width=\'100%25\' height=\'100%25\' xmlns=\'http://www.w3.org/2000/svg\'%3e%3crect width=\'100%25\' height=\'100%25\' fill=\'none\' stroke=\'%23333\' stroke-width=\'1\' stroke-dasharray=\'2%2c2\' stroke-linecap=\'square\'/%3e%3c/svg%3e")';
+                swatch.onclick = () => applyColor('hiliteColor', color);
+                highlightColorGrid.appendChild(swatch);
+            });
+        }
+
+    </script>
+</body>
+</html>
